@@ -31,12 +31,18 @@ func panicT[T any](v T, error error) T {
 	return v
 }
 
-func getFileMD5(fn string) []byte {
+func getFileMD5(fn string) ([]byte, error) {
 	hash := md5.New()
-	f := panicT(os.Open(fn))
+	f, err := os.Open(fn)
+	if err != nil {
+		return nil, err
+	}
 	defer f.Close()
-	panicT(io.Copy(hash, f))
-	return hash.Sum(nil)
+	_, err = io.Copy(hash, f)
+	if err != nil {
+		return nil, err
+	}
+	return hash.Sum(nil), nil
 }
 
 func statDir(dir string, outCh chan<- *fileInfo, complete *sync.WaitGroup, minSize int) {
@@ -53,12 +59,16 @@ func statDir(dir string, outCh chan<- *fileInfo, complete *sync.WaitGroup, minSi
 				nextDirs = append(nextDirs, fn)
 				continue
 			}
+
 			fSize := stat.Size()
 			if fSize <= int64(minSize) {
 				continue
 			}
 
-			sum := getFileMD5(fn)
+			sum, err := getFileMD5(fn)
+			if err != nil {
+				continue
+			}
 
 			key := fmt.Sprintf("%d_%x", fSize, sum)
 			outCh <- &fileInfo{
